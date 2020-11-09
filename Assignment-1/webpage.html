@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    <title>5 Day Weather</title>
+</head>
+
+<body>
+    <div id="app">
+        <v-app id="inspire">
+            <v-app-bar app color="pink lighten-3" dark>
+                <v-col cols="3" sm="3" class="mt-8">
+                    <v-text-field v-model="locationInput" label="Location" clearable outlined dense></v-text-field>
+                </v-col>
+                <v-btn color="primary" class="mt-1" @click="getWeather" depressed>
+                    <v-icon left>
+                        mdi-cloud-search-outline
+                    </v-icon>
+                    Search
+                </v-btn>
+                <span class="red--text font-weight-bold ml-5" style="width: 20%;">{{errorMessage}}</span>
+                <span class="float-right text-h5 text-right" style="width: 100%;">{{curTime}}</span>
+            </v-app-bar>
+            <v-navigation-drawer v-model="drawer" app class="pt-4" color="pink lighten-2" mini-variant
+                mini-variant-width="100">
+                    <span
+                        style="text-align: center; width: 100%; display: inline-block; font-size: 1.4rem; text-decoration: underline; margin-top: 0.35rem; color: #fff;">Packing</span>
+                <v-col style="display: flex; align-items: stretch; justify-content: center; flex-direction: column;">
+                    <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                            <v-icon v-bind="attrs" v-on="on" x-large class="ma-10"
+                                :class="willRain ? 'blue--text' : ''">
+                                mdi-umbrella-outline
+                            </v-icon>
+                        </template>
+                        Rain
+                    </v-tooltip>
+                    <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                            <v-icon v-bind="attrs" v-on="on" x-large class="ma-10"
+                                :class="coldWeather ? 'cyan--text' : ''">
+                                mdi-snowflake
+                            </v-icon>
+                        </template>
+                        Cold
+                    </v-tooltip>
+                    <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                            <v-icon v-bind="attrs" v-on="on" x-large class="ma-10"
+                                :class="warmWeather ? 'yellow--text' : ''">
+                                mdi-weather-sunny
+                            </v-icon>
+                        </template>
+                        Warm
+                    </v-tooltip>
+                    <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                            <v-icon v-bind="attrs" v-on="on" x-large class="ma-10"
+                                :class="hotWeather ? 'red--text' : ''">
+                                mdi-thermometer-alert
+                            </v-icon>
+                        </template>
+                        Hot
+                    </v-tooltip>
+                </v-col>
+            </v-navigation-drawer>
+            <v-main style="background-color: rgb(236, 236, 236);">
+                <v-container>
+                    <v-row dense>
+                        <template v-for="(value,index) of weatherData">
+                            <v-col :key="index" class="mt-2" cols="12">
+                                <span class="text-h5 font-weight-light">{{ value[0].timeString.split(" ")[0] }}</span>
+                            </v-col>
+
+                            <v-col v-for="(weatherInstance, weatherIndex) of value" :key="`${index}${weatherIndex}`"
+                                cols="auto" class="custom8cols">
+                                <v-sheet height="180" class="rounded-xl" color="rgb(255, 255, 255)">
+                                    <div style="font-size: 1.4rem; text-decoration: underline;" class="ml-10 pl-8">
+                                        {{value[weatherIndex].timeString.split(" ")[1].substring(0, 5)}}
+                                    </div>
+                                    <div style="font-size: 3rem;" class="pl-5">
+                                        <v-icon x-large color="rgba(255, 39, 39, 0.64)">
+                                            mdi-thermometer
+                                        </v-icon>
+                                        {{value[weatherIndex].temp}}°
+                                    </div>
+                                    <div class="pl-7">
+                                        <v-icon medium class="pr-6" color="rgba(72, 114, 238, 0.64)">
+                                            mdi-weather-rainy
+                                        </v-icon>
+                                        {{value[weatherIndex].rain}}mm
+                                    </div>
+                                    <div class="pl-7">
+                                        <v-icon medium class="pr-6" color="rgba(35, 215, 155, 0.64)">
+                                            mdi-weather-windy
+                                        </v-icon>
+                                        {{value[weatherIndex].wind.speed}}m/s
+                                    </div>
+                                </v-sheet>
+                            </v-col>
+                        </template>
+                    </v-row>
+                </v-container>
+            </v-main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+    <script>
+        const WEATHER_URL = "http://localhost:5501/5dayweather"
+        const UMBRELLA_THRESHOLD = 0; //min amount of rain required for umbrella (in mm)
+        const COLD_THRESHOLD = 10; //
+        const HOT_THRESHOLD = 20; //
+        new Vue({
+            el: '#app',
+            data: {
+                "locationInput": "Dublin,IE",
+                "drawer": true,
+                "weatherData": [],
+                "willRain": false,
+                "coldWeather": false,
+                "warmWeather": false,
+                "hotWeather": false,
+                "errorMessage": ""
+            },
+            computed: {
+                curTime: function () {
+                    return new Date().toLocaleTimeString('en-IE', { hour12: false, hour: "numeric", minute: "numeric" });
+                }
+            },
+            methods: {
+                getWeather: function () {
+                    axios.get(WEATHER_URL, {
+                        params: {
+                            location: this.locationInput
+                        }
+                    })
+                        .then(res => res.data)
+                        .then(res => {
+                            if (res.error) {
+                                this.errorMessage = res.error;
+                                return
+                            }
+                            this.errorMessage = ""
+                            let weather = res.weather;
+                            weather.forEach(element => {
+                                this.willRain = this.willRain || element.rain > UMBRELLA_THRESHOLD;
+                                this.coldWeather = this.coldWeather || element.temp < COLD_THRESHOLD;
+                                this.warmWeather = this.warmWeather || (element.temp > COLD_THRESHOLD && element.temp < HOT_THRESHOLD);
+                                this.hotWeather = this.hotWeather || element.temp > HOT_THRESHOLD;
+                            });
+                            this.weatherData = sortToArrayOfDays(weather)
+                            console.log(this.weatherData)
+                        })
+                }
+            },
+            vuetify: new Vuetify(),
+        })
+        function sortToArrayOfDays(inputArray) {
+            let returnArray = [];
+            let curIndex = -1;
+            let curDate = "";
+            for (element of inputArray) {
+                let dayStr = element.timeString.split(" ")[0];
+                console.log(dayStr)
+                if (dayStr !== curDate) {
+                    curDate = dayStr;
+                    curIndex++;
+                    returnArray[curIndex] = [];
+                }
+                returnArray[curIndex].push(element)
+            }
+            return returnArray;
+        }
+    </script>
+    <style>
+        .custom8cols {
+            width: 12.5%;
+            max-width: 12.5%;
+            flex-basis: 12.5%;
+        }
+    </style>
+</body>
+
+</html>
