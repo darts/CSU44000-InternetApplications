@@ -9,8 +9,7 @@ const app = require("express")();
 const axios = require("axios").default;
 const cors = require("cors");
 
-//Allow cross origin requests
-app.use(cors());
+app.use(cors());//Allow cross origin requests
 
 function getWeatherForLocation(location) {
     return axios.get(API_BASE_URL, {
