@@ -1,5 +1,6 @@
 const SERVER_PORT = 5501;
-const app = require("express")();
+const express = require("express");
+const app = express();
 const cors = require("cors");
 const fs = require("fs");
 const util = require('util');
@@ -38,7 +39,7 @@ let dbParams = {
 };
 
 app.use(cors()); //Allow cross origin requests
-app.use(express.static('public'))
+app.use(express.static('public'));
 
 //returns a promise object from the s3 bucket
 function getFromS3Bucket() {
