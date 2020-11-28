@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    <title>Movie Query</title>
+</head>
+
+<body>
+    <div id="app">
+        <v-app id="inspire">
+            <v-container>
+                <v-row>
+                    <v-col>
+                        <v-btn @click="createDB">
+                            Create Database
+                        </v-btn>
+                        <v-btn @click="deleteDB" :disabled="dbUnloaded">
+                            Delete Database
+                        </v-btn>
+                        <v-progress-linear v-model="dbStatus" color="deep-purple accent-4" height="8" class="mt-3">
+                        </v-progress-linear>
+                        <v-text-field :rules="numbers" label="Year" v-model="year" :disabled="dbUnloaded">
+                        </v-text-field>
+                        <v-text-field :rules="name" label="Name" v-model="title" :disabled="dbUnloaded">
+                        </v-text-field>
+                        <v-btn @click="searchDB" class="mt-3" :disabled="dbUnloaded">
+                            Search
+                        </v-btn>
+                    </v-col>
+                    <v-divider vertical></v-divider>
+                    <v-col>
+                        <ul id="film-list" style="max-height: 90vh; overflow-y: scroll;">
+                            <li v-for="film in films" :key="film.title">
+                                <v-container>
+                                    <v-row>
+                                        <v-col>
+                                            {{film.title}}
+                                        </v-col>
+                                        <v-col>
+                                            {{film.info.release_date.substr(0, 10)}}
+                                        </v-col>
+                                        <v-col>
+                                            {{film.info.rating}}/10
+                                        </v-col>
+                                        <v-col>
+                                            <v-img max-height="70"
+                                                max-width="70" :src=film.info.image_url></v-img>
+                                        </v-col>
+                                    </v-row>
+                                </v-container>
+                            </li>
+                        </ul>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </v-app>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+    <script>
+        const queryURL = "http://localhost:5501"
+        new Vue({
+            el: "#app",
+            data: {
+                numbers: [
+                    value => !!value || "Required.",
+                    value => (value || '').length <= 4 || "Max 4 digits",
+                    value => /^\d+/.test(value) || "Numbers only."
+                ],
+                name: [
+                    value => !!value || "Required."
+                ],
+                films: [],
+                dbLoading: null,
+                dbStatus: -1,
+                year: "",
+                title: ""
+            },
+            computed: {
+                dbUnloaded: function () {
+                    return this.dbStatus !== 100;
+                }
+            },
+            methods: {
+                createDB: function () {
+                    axios.post(queryURL + "/database").then(res => {
+                        this.dbStatus = 0;
+                        this.dbLoading = window.setInterval(() => this.continuousGetDBStatus(), 1000);
+                        console.log(res);
+                    }).catch(err => {
+                        this.dbStatus = 100;
+                        alert("Database loaded");
+                        console.error(err.status)
+                    })
+                },
+                deleteDB: function () {
+                    axios.delete(queryURL + "/database").then(res => {
+                        dbStatus = 0;
+                        alert("Database table deleted");
+                    }).catch(err => {
+                        console.log(err)
+                    })
+                },
+                searchDB: function () {
+                    axios.get(queryURL + "/movie", {
+                        params: {
+                            year: this.year,
+                            title: this.title
+                        }
+                    }).then(res => {
+                        this.films = res.data;
+                    }).catch(err => {
+                        console.log(err);
+                    })
+                },
+                continuousGetDBStatus: function () {
+                    axios.get(queryURL + "/status").then((res) => {
+                        this.dbStatus = res.data.fractionComplete * 100;
+                        if (res.data.complete && this.dbLoading) {
+                            clearInterval(this.dbLoading)
+                            this.dbLoading = false
+                            alert("Database loaded");
+                        }
+                    })
+                }
+            },
+            mounted: function () { },
+            vuetify: new Vuetify()
+        })
+    </script>
+</body>
+
+</html>
