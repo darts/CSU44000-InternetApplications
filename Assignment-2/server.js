@@ -5,8 +5,7 @@ const fs = require("fs");
 const util = require('util');
 const AWS = require("aws-sdk");
 AWS.config.update({
-    region: 'us-east-1',
-    endpoint: "http://localhost:8000"
+    region: 'us-east-1'
 });
 
 const AWS_BUCKET = "csu44000assign2useast20";
@@ -85,13 +84,6 @@ function createDynamo() {
     return dynamoDB.createTable(dbParams).promise();
 }
 
-//reads from a local file
-function getFromS3BucketLOCAL() {
-    return new Promise((resolve, reject) => {
-        resolve(JSON.parse(fs.readFileSync('moviedata.json', 'utf8')));
-    });
-}
-
 //querys the database
 function queryDB(year, title) {
     let queryParams = {
@@ -135,8 +127,7 @@ app.delete("/database", (_, res) => {
 
 app.post("/database", (_, res) => {
     createDynamo().then(async () => {
-        //let response_json = JSON.parse((await getFromS3Bucket()).Body);
-        let response_json = await getFromS3BucketLOCAL();
+        let response_json = JSON.parse((await getFromS3Bucket()).Body);
         writeToDynamo(response_json);
         res.status(200).send("Database creation in progress");
     }).catch(() => {
@@ -145,18 +136,6 @@ app.post("/database", (_, res) => {
     });
 
 });
-
-// (async () => {
-//     await createDynamo();
-//     let response_json = await getFromS3BucketLOCAL();
-//     writeToDynamo(response_json);
-//     setTimeout(async () => {
-//         let res = await queryDB(1999, "The");
-//         console.log(res.Items);
-//     }, 10000);
-// })();
-
-
 
 app.listen(SERVER_PORT, () => console.log(`Server running on port: ${SERVER_PORT}`));
 process.on("SIGINT", async () => {
