@@ -1,4 +1,4 @@
-const SERVER_PORT = 5501;
+const SERVER_PORT = 80;
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -142,7 +142,10 @@ app.post("/database", (_, res) => {
 app.listen(SERVER_PORT, () => console.log(`Server running on port: ${SERVER_PORT}`));
 process.on("SIGINT", async () => {
     console.log("Wiping DB... Please wait.");
-    await deleteDynamo().catch();
+    await deleteDynamo().catch((err) => {
+        console.log("failed to drop db")
+        process.exit(1);
+    });
     console.log("DB dropped");
-    process.exit(20);
+    process.exit(0);
 });
