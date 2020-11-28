@@ -38,6 +38,7 @@ let dbParams = {
 };
 
 app.use(cors()); //Allow cross origin requests
+app.use(express.static('public'))
 
 //returns a promise object from the s3 bucket
 function getFromS3Bucket() {
