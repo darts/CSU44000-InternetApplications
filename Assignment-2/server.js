@@ -117,7 +117,7 @@ app.get("/status", (_, res) => {
 });
 
 app.delete("/database", (_, res) => {
-    deleteDynamo().then(res => {
+    deleteDynamo().then(_ => {
         resetWriteStatus();
         res.status(200).send("Database deleted");
     }).catch(err => {
@@ -130,8 +130,8 @@ app.delete("/database", (_, res) => {
 app.post("/database", (_, res) => {
     createDynamo().then(async () => {
         let response_json = JSON.parse((await getFromS3Bucket()).Body);
-        writeToDynamo(response_json);
         res.status(200).send("Database creation in progress");
+        setTimeout(() => writeToDynamo(response_json), 10000) //handle aws weird promise nonsense    
     }).catch(() => {
         res.status(400).end();
         return;

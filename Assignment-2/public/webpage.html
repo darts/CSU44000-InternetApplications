@@ -95,9 +95,8 @@
                         this.dbLoading = window.setInterval(() => this.continuousGetDBStatus(), 1000);
                         console.log(res);
                     }).catch(err => {
-                        this.dbStatus = 100;
-                        alert("Database loaded");
-                        console.error(err.status)
+                        alert("Error loading database!");
+                        console.error(err)
                     })
                 },
                 deleteDB: function () {
