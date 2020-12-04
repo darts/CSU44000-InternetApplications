@@ -71,34 +71,6 @@ function writeToDynamo(movieData) {
     return movieData;
 }
 
-//deletes the table in the database
-function deleteDynamo() {
-    return dynamoDB.deleteTable({ TableName: TABLE }).promise();
-}
-
-//create a database
-function createDynamo() {
-    return dynamoDB.createTable(dbParams).promise();
-}
-
-//this is required because dynamodb creation is weird
-//the response a request is immediately resolved but the response object changes state
-//read more here: https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html
-function waitUntilDynamoActionStatusOrFailed(pendingstatus, successStatus, loopTimeMs) {
-    return new Promise(async (resolve, reject) => {
-        let tableState, tableStatusWord;
-        do {
-            await new Promise(resolve => setTimeout(resolve, loopTimeMs));
-            //get the current state of the DB
-            tableState = await dynamoDB.describeTable({ TableName: TABLE }).promise()
-            tableStatusWord = tableState?.Table?.TableStatus
-        } while (tableStatusWord === pendingstatus);
-        if (tableStatusWord === successStatus)
-            resolve();
-        reject();
-    });
-}
-
 //querys the database
 function queryDB(year, title) {
     let queryParams = {
@@ -124,16 +96,16 @@ app.get("/movie", asyncErrWrapper(async (req, res) => {
 
 app.delete("/database", asyncErrWrapper(async (_, res) => {
     console.log("Deleting Database");
-    await deleteDynamo();
-    waitUntilDynamoActionStatusOrFailed("DELETING", "", 200).catch();
+    await dynamoDB.deleteTable({ TableName: TABLE }).promise();
+    await dynamoDB.waitFor("tableNotExists", {TableName: TABLE}).promise();
     console.log("Database deleted");
     res.status(200).send("Database deleted");
 }));
 
 app.post("/database", asyncErrWrapper(async (_, res, next) => {
     console.log("Creating Database");
-    await createDynamo();
-    await waitUntilDynamoActionStatusOrFailed("CREATING", "ACTIVE", 1000);
+    await dynamoDB.createTable(dbParams).promise();
+    await dynamoDB.waitFor("tableExists", {TableName: TABLE}).promise();
     let response_json = JSON.parse((await getFromS3Bucket()).Body);
     await Promise.all(writeToDynamo(response_json));
     console.log("Database Created!");
