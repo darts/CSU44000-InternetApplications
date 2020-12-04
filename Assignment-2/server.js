@@ -1,9 +1,7 @@
-const SERVER_PORT = 80;
+const SERVER_PORT = 8001;
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const fs = require("fs");
-const util = require('util');
 const AWS = require("aws-sdk");
 AWS.config.update({
     region: 'us-east-1'
@@ -14,14 +12,11 @@ const AWS_FILENAME = "moviedata.json";
 const TABLE = "Movies";
 
 const s3 = new AWS.S3();
+
+//dynamoDB boilerplate
 const bucketParams = {
     Bucket: AWS_BUCKET,
     Key: AWS_FILENAME
-};
-
-let dbWriteStatus = {
-    total: -1,
-    current: -2
 };
 
 let dynamoDB = new AWS.DynamoDB();
@@ -38,8 +33,17 @@ let dbParams = {
     BillingMode: "PAY_PER_REQUEST"
 };
 
-app.use(cors()); //Allow cross origin requests
-app.use(express.static('public'));
+app.use(cors()); //Allow cross origin requests for local development
+app.use(express.static('public')); //serve the webpage
+
+//this feature is coming natively in Express 5
+//Express 5 is currently in Alpha so this will do for now
+//catches async errors and passes them to the error handling fn defined at the end
+function asyncErrWrapper(asyncFun) {
+    return function (req, res, next) {
+        asyncFun(req, res, next).catch(next);
+    };
+}
 
 //returns a promise object from the s3 bucket
 function getFromS3Bucket() {
@@ -49,9 +53,7 @@ function getFromS3Bucket() {
 //write the object to the db
 function writeToDynamo(movieData) {
     let docClient = new AWS.DynamoDB.DocumentClient();
-    dbWriteStatus.total = movieData.length;
-    dbWriteStatus.current = 0;
-    movieData.forEach(function (movie) {
+    movieData.map(function (movie) {
         let params = {
             TableName: TABLE,
             Item: {
@@ -60,15 +62,13 @@ function writeToDynamo(movieData) {
                 "info": movie.info
             }
         };
-        docClient.put(params, function (err, data) {
+        return docClient.put(params, function (err, data) {
             if (err) {
                 console.error("Unable to add movie", movie.title, ". Error JSON:", JSON.stringify(err, null, 2));
-            } else {
-                dbWriteStatus.current++;
-                console.log(`PutItem succeeded: ${dbWriteStatus.current} / ${dbWriteStatus.total} - ${movie.title}`);
             }
-        });
+        }).promise();
     });
+    return movieData;
 }
 
 //deletes the table in the database
@@ -76,14 +76,27 @@ function deleteDynamo() {
     return dynamoDB.deleteTable({ TableName: TABLE }).promise();
 }
 
-function resetWriteStatus() {
-    dbWriteStatus.total = -1;
-    dbWriteStatus.current = -2;
-}
-
 //create a database
 function createDynamo() {
     return dynamoDB.createTable(dbParams).promise();
+}
+
+//this is required because dynamodb creation is weird
+//the response a request is immediately resolved but the response object changes state
+//read more here: https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html
+function waitUntilDynamoActionStatusOrFailed(pendingstatus, successStatus, loopTimeMs) {
+    return new Promise(async (resolve, reject) => {
+        let tableState, tableStatusWord;
+        do {
+            await new Promise(resolve => setTimeout(resolve, loopTimeMs));
+            //get the current state of the DB
+            tableState = await dynamoDB.describeTable({ TableName: TABLE }).promise()
+            tableStatusWord = tableState?.Table?.TableStatus
+        } while (tableStatusWord === pendingstatus);
+        if (tableStatusWord === successStatus)
+            resolve();
+        reject();
+    });
 }
 
 //querys the database
@@ -104,48 +117,37 @@ function queryDB(year, title) {
     return docClient.query(queryParams).promise();
 }
 
-app.get("/movie", async (req, res) => {
+app.get("/movie", asyncErrWrapper(async (req, res) => {
     let dbRes = await queryDB(Number(req.query.year), req.query.title);
     res.send(dbRes.Items);
-});
+}));
 
-app.get("/status", (_, res) => {
-    res.send({
-        complete: dbWriteStatus.current === dbWriteStatus.total,
-        fractionComplete: dbWriteStatus.current / dbWriteStatus.total
-    });
-});
+app.delete("/database", asyncErrWrapper(async (_, res) => {
+    console.log("Deleting Database");
+    await deleteDynamo();
+    waitUntilDynamoActionStatusOrFailed("DELETING", "", 200).catch();
+    console.log("Database deleted");
+    res.status(200).send("Database deleted");
+}));
 
-app.delete("/database", (_, res) => {
-    deleteDynamo().then(_ => {
-        resetWriteStatus();
-        res.status(200).send("Database deleted");
-    }).catch(err => {
-        console.log(err);
-        if (err)
-            res.status(500).send("Failed to delete database");
-    });
-});
+app.post("/database", asyncErrWrapper(async (_, res, next) => {
+    console.log("Creating Database");
+    await createDynamo();
+    await waitUntilDynamoActionStatusOrFailed("CREATING", "ACTIVE", 1000);
+    let response_json = JSON.parse((await getFromS3Bucket()).Body);
+    await Promise.all(writeToDynamo(response_json));
+    console.log("Database Created!");
+    res.status(200).send("Database Created!");
+}));
 
-app.post("/database", (_, res) => {
-    createDynamo().then(async () => {
-        let response_json = JSON.parse((await getFromS3Bucket()).Body);
-        res.status(200).send("Database creation in progress");
-        setTimeout(() => writeToDynamo(response_json), 10000) //handle aws weird promise nonsense    
-    }).catch(() => {
-        res.status(400).end();
-        return;
-    });
-
+//handles async errors
+app.use((err, req, res, next) => {
+    console.error(err);
+    if (err?.message.startsWith("Table already exists"))
+        return res.status(210).send("Table already exists");
+    else if (err?.message.startsWith("Requested resource not found: Table:"))
+        return res.status(210).send("Table already deleted");
+    res.status(500).send(err);
 });
 
 app.listen(SERVER_PORT, () => console.log(`Server running on port: ${SERVER_PORT}`));
-process.on("SIGINT", async () => {
-    console.log("Wiping DB... Please wait.");
-    await deleteDynamo().catch((err) => {
-        console.log("failed to drop db")
-        process.exit(1);
-    });
-    console.log("DB dropped");
-    process.exit(0);
-});
